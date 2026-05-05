@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { Sun, Moon } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import type { UserRole } from '../types';
+import { ALL_ROLES, roleDisplayName } from '../auth/rbac';
+import { isDummyDataMode } from '../services/dummyMode';
 
 type AuthMode = 'signin' | 'signup';
 
@@ -15,6 +18,7 @@ export default function LoginPage() {
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
     const [loading, setLoading] = useState(false);
+    const [demoRole, setDemoRole] = useState<UserRole>('APPCB_Regional');
 
     const resetForm = () => {
         setUsername('');
@@ -37,7 +41,7 @@ export default function LoginPage() {
         setLoading(true);
         try {
             if (mode === 'signin') {
-                await login(username, password);
+                await login(username, password, isDummyDataMode() ? demoRole : undefined);
             } else {
                 const msg = await signup(username, password);
                 setSuccess(msg);
@@ -114,6 +118,24 @@ export default function LoginPage() {
                         </div>
                     )}
 
+                    {mode === 'signin' && isDummyDataMode() && (
+                        <div className="form-group">
+                            <label>Demo persona</label>
+                            <select
+                                value={demoRole}
+                                onChange={(e) => setDemoRole(e.target.value as UserRole)}
+                                style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border-color, #334155)', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
+                            >
+                                {ALL_ROLES.map(r => (
+                                    <option key={r} value={r}>{roleDisplayName(r)}</option>
+                                ))}
+                            </select>
+                            <p style={{ fontSize: 11, opacity: 0.75, marginTop: 6, marginBottom: 0 }}>
+                                Dummy mode only (VITE_DUMMY_DATA=true). Choose APPCB, ULB, or Public before sign in.
+                            </p>
+                        </div>
+                    )}
+
                     {error && (
                         <p style={{ color: 'var(--accent-danger, #ef4444)', fontSize: '12px', marginBottom: '12px' }}>{error}</p>
                     )}
@@ -134,11 +156,9 @@ export default function LoginPage() {
                     )}
                 </div>
 
-                {mode === 'signin' && (
+                {mode === 'signin' && !isDummyDataMode() && (
                     <div className="demo-hint" style={{ marginTop: '8px', opacity: 0.7, fontSize: '11px' }}>
-                        <strong>Default Accounts:</strong><br />
-                        superAdmin / superAdmin123# &nbsp;|&nbsp; admin / admin123# &nbsp;|&nbsp; officer / officer123#<br />
-                        ae.priya / ae123# &nbsp;|&nbsp; je.ramesh / je123#
+                        <strong>Backend login:</strong> use credentials issued by your administrator. Legacy demo accounts may still map to APPCB / ULB roles if the API returns those labels.
                     </div>
                 )}
             </div>

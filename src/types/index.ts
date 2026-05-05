@@ -136,7 +136,13 @@ export interface SourceContribution {
 }
 
 // ========== Auth / RBAC ==========
-export type UserRole = 'SuperAdmin' | 'Admin' | 'Officer' | 'AE' | 'JE';
+/** DSS personas: APPCB (pollution control), ULB (municipal), Public (read-only map). */
+export type UserRole =
+  | 'APPCB_Regional'
+  | 'APPCB_Field'
+  | 'ULB_City'
+  | 'ULB_Ward'
+  | 'Public';
 
 export interface UserProfile {
   id: string;

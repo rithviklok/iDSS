@@ -1,4 +1,6 @@
+import { useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
 import {
     Activity, Settings, Radio, Grid3X3, Zap, ShieldOff, FileText,
     BookOpen, GitBranch, UserCheck, Clock,
@@ -66,6 +68,19 @@ const sections: NavSection[] = [
 export default function ConfiguratorLayout({ children }: { children: React.ReactNode }) {
     const navigate = useNavigate();
     const location = useLocation();
+    const { canManageSensorRegistry } = useAuth();
+
+    const sectionsForUser = useMemo(
+        () =>
+            sections.map(section => ({
+                ...section,
+                items: section.items.filter(item => {
+                    if (item.path === '/configurator/sensors') return canManageSensorRegistry;
+                    return true;
+                }),
+            })),
+        [canManageSensorRegistry],
+    );
 
     const buildAppTargetPath = (path: string) => {
         const normalizedPath = path === '/' ? '' : path;
@@ -98,7 +113,7 @@ export default function ConfiguratorLayout({ children }: { children: React.React
                 </div>
 
                 <nav className="configurator-nav">
-                    {sections.map((section) => (
+                    {sectionsForUser.map((section) => (
                         <div key={section.title} className="configurator-nav-section">
                             <div className="configurator-nav-section-title">
                                 {section.icon}

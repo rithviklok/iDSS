@@ -1,6 +1,7 @@
 import { LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { roleDisplayName } from '../auth/rbac';
 
 export default function ProfilePage() {
     const { user, logout } = useAuth();
@@ -49,7 +50,7 @@ export default function ProfilePage() {
                 <div className="profile-field">
                     <div className="label">Role</div>
                     <div className="value">
-                        <span className="role-badge">{user.role}</span>
+                        <span className="role-badge">{roleDisplayName(user.role)}</span>
                     </div>
                 </div>
 

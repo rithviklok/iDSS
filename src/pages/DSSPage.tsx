@@ -13,6 +13,7 @@ import type { DssRule, TeamMember } from '../services/api';
 import { useLocation } from '../contexts/LocationContext';
 import { useAuth } from '../contexts/AuthContext';
 import { isDummyDataMode } from '../services/dummyMode';
+import { canViewDssSensorHealthTab } from '../auth/rbac';
 
 const DSS_API_BASE = import.meta.env.VITE_DSS_API_BASE || 'http://localhost:3000';
 
@@ -80,7 +81,7 @@ function apiTriggerToTriggeredRule(t: ReturnType<typeof Object.assign>): Trigger
 }
 
 // ========== Tab 1: Trigger Queue ==========
-function TriggerQueue({ triggers, loading }: { triggers: TriggeredRule[]; loading: boolean; isAdminOrSuper?: boolean; onRefresh?: () => void }) {
+function TriggerQueue({ triggers, loading }: { triggers: TriggeredRule[]; loading: boolean; onRefresh?: () => void }) {
     const navigate = useNavigate();
 
     if (loading) return (
@@ -587,13 +588,12 @@ export default function DSSPage() {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const { selectedDistrict, selectedWard } = useLocation();
-    const { isAdminOrSuper, user, hasRole } = useAuth();
+    const { canViewRegulatoryDss, user, isWardScopedOfficer } = useAuth();
     const [activeTab, setActiveTab] = useState<DSSTab>('triggers');
     const [showSimulation, setShowSimulation] = useState(false);
     const [teamJeFilter, setTeamJeFilter] = useState<string>('all');
 
-    const isJE = hasRole('JE');
-    const isAE = hasRole('AE');
+    const isCityLead = user?.role === 'ULB_City';
 
     const { data: triggersRaw = [], isLoading: loadingTriggers } = useQuery({
         queryKey: ['dss-triggers', selectedDistrict.id, selectedWard],
@@ -604,13 +604,13 @@ export default function DSSPage() {
     const { data: apiRules = [], isLoading: loadingRules } = useQuery({
         queryKey: ['dss-rules'],
         queryFn: () => fetchDssRules(),
-        enabled: isAdminOrSuper,
+        enabled: canViewRegulatoryDss,
     });
 
     const { data: teamMembers = [] } = useQuery<TeamMember[]>({
         queryKey: ['auth-team'],
         queryFn: () => fetchTeam(),
-        enabled: isAE || isAdminOrSuper,
+        enabled: isCityLead || canViewRegulatoryDss,
     });
 
     const invalidateDssData = () => {
@@ -621,13 +621,18 @@ export default function DSSPage() {
         queryClient.invalidateQueries({ queryKey: ['dss-simulations'] });
     };
 
-    const allTabs: { key: DSSTab; label: string; icon: React.ReactNode; count?: number; adminOnly?: boolean }[] = [
+    type TabRow = { key: DSSTab; label: string; icon: React.ReactNode; count?: number; visibility?: 'regulatory' | 'sensor' };
+    const allTabs: TabRow[] = [
         { key: 'triggers', label: 'Live Triggers', icon: <Zap size={15} />, count: triggers.filter(t => t.status !== 'completed').length },
-        { key: 'rules', label: 'Rule Logic', icon: <Shield size={15} />, adminOnly: true },
-        { key: 'sensor-health', label: 'Sensor Health', icon: <Activity size={15} />, adminOnly: true },
-        { key: 'capacity', label: 'Capacity Monitor', icon: <BarChart3 size={15} />, adminOnly: true },
+        { key: 'rules', label: 'Rule Logic', icon: <Shield size={15} />, visibility: 'regulatory' },
+        { key: 'sensor-health', label: 'Sensor Health', icon: <Activity size={15} />, visibility: 'sensor' },
+        { key: 'capacity', label: 'Capacity Monitor', icon: <BarChart3 size={15} />, visibility: 'regulatory' },
     ];
-    const tabs = allTabs.filter(t => !t.adminOnly || isAdminOrSuper);
+    const tabs = allTabs.filter(t => {
+        if (t.visibility === 'regulatory') return canViewRegulatoryDss;
+        if (t.visibility === 'sensor') return !!user && canViewDssSensorHealthTab(user.role);
+        return true;
+    });
 
     // Summary stats from real data
     const activeCount = triggers.filter(t => t.status === 'awaiting_approval' || t.status === 'in_progress').length;
@@ -651,7 +656,7 @@ export default function DSSPage() {
                             {' · '}Auto-populated from live sensor feeds
                         </span>
                     </div>
-                    {(isJE || isAE) && user?.wardIds && user.wardIds.length > 0 && (
+                    {isWardScopedOfficer && user?.wardIds && user.wardIds.length > 0 && (
                         <span style={{
                             marginLeft: 12, padding: '3px 10px', borderRadius: 12,
                             fontSize: '11px', fontWeight: 600,
@@ -665,7 +670,7 @@ export default function DSSPage() {
                     <button className="dss-btn dss-btn-outline" onClick={invalidateDssData} title="Refresh data">
                         <RefreshCw size={14} /> Refresh
                     </button>
-                    {isAdminOrSuper && (
+                    {canViewRegulatoryDss && (
                         <>
                             <button className={`dss-sim-toggle ${showSimulation ? 'active' : ''}`} onClick={() => setShowSimulation(!showSimulation)}>
                                 <Play size={14} /> Simulate 30 Days
@@ -686,7 +691,7 @@ export default function DSSPage() {
                     <Wallet size={14} />
                     <span>Budget Impact: <strong>{formatINR(totalBudget)}</strong></span>
                 </div>
-                {isAdminOrSuper && (
+                {canViewRegulatoryDss && (
                     <div className="dss-stat-pill">
                         <Shield size={14} />
                         <span><strong>{apiRules.length}</strong> Rules Configured</span>
@@ -701,7 +706,7 @@ export default function DSSPage() {
             </div>
 
             {/* AE Team Panel */}
-            {isAE && teamMembers.length > 0 && (
+            {isCityLead && teamMembers.length > 0 && (
                 <div style={{
                     display: 'flex', gap: 8, padding: '8px 16px',
                     background: 'var(--bg-secondary, #1e293b)', borderRadius: 8, margin: '0 0 12px',
@@ -758,7 +763,7 @@ export default function DSSPage() {
                     {activeTab === 'triggers' && (() => {
                         let filteredTriggers = triggers;
                         // AE JE filter
-                        if (isAE && teamJeFilter !== 'all') {
+                        if (isCityLead && teamJeFilter !== 'all') {
                             const je = teamMembers.find(m => m.id === teamJeFilter);
                             if (je) {
                                 const jeWards = je.wards.map(w => w.wardName.toLowerCase());
@@ -767,7 +772,7 @@ export default function DSSPage() {
                                 );
                             }
                         }
-                        return <TriggerQueue triggers={filteredTriggers} loading={loadingTriggers} isAdminOrSuper={isAdminOrSuper} onRefresh={invalidateDssData} />;
+                        return <TriggerQueue triggers={filteredTriggers} loading={loadingTriggers} onRefresh={invalidateDssData} />;
                     })()}
                     {activeTab === 'rules' && <RuleLogic apiRules={apiRules} loading={loadingRules} />}
                     {activeTab === 'sensor-health' && <SensorHealth districtId={selectedDistrict.id} />}

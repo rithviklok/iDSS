@@ -10,6 +10,7 @@ import { fetchWardsByDistrict } from '../../services/api';
 import { isDummyDataMode } from '../../services/dummyMode';
 import { getDistrictById } from '../../data/geography';
 import type { UserRole } from '../../types';
+import { roleDisplayName, roleBadgeStyle } from '../../auth/rbac';
 
 function pm25BadgeColor(v: number | null): { bg: string; text: string } {
     if (v === null) return { bg: 'rgba(100,116,139,0.25)', text: '#94a3b8' };
@@ -26,7 +27,7 @@ interface AppShellProps { children: React.ReactNode }
 export default function AppShell({ children }: AppShellProps) {
     const navigate = useNavigate();
     const routerLocation = useRouterLocation();
-    const { user, logout, isAdminOrSuper, createUser } = useAuth();
+    const { user, logout, canManageUsers, createUser, isPublicUser, isWardScopedOfficer } = useAuth();
     const { theme, toggleTheme } = useTheme();
     const {
         selectedDistrict, setDistrictById, selectedWard, setSelectedWard,
@@ -37,7 +38,7 @@ export default function AppShell({ children }: AppShellProps) {
     const [showCreateUser, setShowCreateUser] = useState(false);
     const [cuUsername, setCuUsername] = useState('');
     const [cuPassword, setCuPassword] = useState('');
-    const [cuRole, setCuRole] = useState<UserRole>('Officer');
+    const [cuRole, setCuRole] = useState<UserRole>('ULB_City');
     const [cuMsg, setCuMsg] = useState('');
     const [cuErr, setCuErr] = useState('');
     const [cuLoading, setCuLoading] = useState(false);
@@ -68,9 +69,8 @@ export default function AppShell({ children }: AppShellProps) {
                     number: i + 1,
                 }));
 
-    // JE/AE: filter ward list to only their assigned wards
-    const isJeOrAe = user && ['JE', 'AE'].includes(user.role);
-    const wardList = isJeOrAe && user?.wardIds && user.wardIds.length > 0
+    // ULB ward officers: filter ward list to assigned wards only
+    const wardList = isWardScopedOfficer && user?.wardIds && user.wardIds.length > 0
         ? allWardList.filter(w => user.wardIds!.includes(w.number))
         : allWardList;
 
@@ -79,13 +79,14 @@ export default function AppShell({ children }: AppShellProps) {
         : null;
     const districtsForState = allDistricts.filter(d => d.state === selectedDistrict.state);
 
+    const officialRoles: UserRole[] = ['APPCB_Regional', 'APPCB_Field', 'ULB_City', 'ULB_Ward'];
     const navItems = [
-        { path: '/', icon: <Map size={18} />, label: 'Map View', roles: ['SuperAdmin', 'Admin', 'Officer', 'AE', 'JE'] },
-        { path: '/dss', icon: <Shield size={18} />, label: 'Triggers', roles: ['SuperAdmin', 'Admin', 'Officer', 'AE', 'JE'] },
-        { path: '/issues', icon: <AlertTriangle size={18} />, label: 'Issues', roles: ['SuperAdmin', 'Admin', 'Officer', 'AE', 'JE'] },
-        { path: '/notifications', icon: <Bell size={18} />, label: 'Notifications', badge: unreadNotifications || undefined, roles: ['SuperAdmin', 'Admin', 'Officer', 'AE', 'JE'] },
-        ...(user?.role === 'AE' ? [{ path: '/dss', icon: <Users size={18} />, label: 'My Team', roles: ['AE'] }] : []),
-        { path: '/configurator', icon: <Settings size={18} />, label: 'Configurator', roles: ['SuperAdmin', 'Admin', 'Officer', 'AE', 'JE'] },
+        { path: '/', icon: <Map size={18} />, label: 'Map View', roles: ['APPCB_Regional', 'APPCB_Field', 'ULB_City', 'ULB_Ward', 'Public'] },
+        { path: '/dss', icon: <Shield size={18} />, label: 'DSS', roles: officialRoles },
+        { path: '/issues', icon: <AlertTriangle size={18} />, label: 'Issues', roles: officialRoles },
+        { path: '/notifications', icon: <Bell size={18} />, label: 'Notifications', badge: unreadNotifications || undefined, roles: officialRoles },
+        ...(user?.role === 'ULB_City' ? [{ path: '/dss', icon: <Users size={18} />, label: 'My Team', roles: ['ULB_City'] as UserRole[] }] : []),
+        { path: '/configurator', icon: <Settings size={18} />, label: 'Configurator', roles: officialRoles },
     ];
 
     const visibleNav = navItems.filter(item => !user || item.roles.includes(user.role));
@@ -147,7 +148,7 @@ export default function AppShell({ children }: AppShellProps) {
             setCuMsg(msg);
             setCuUsername('');
             setCuPassword('');
-            setCuRole('Officer');
+            setCuRole('ULB_City');
         } catch (err) {
             setCuErr((err as Error).message);
         } finally {
@@ -210,7 +211,7 @@ export default function AppShell({ children }: AppShellProps) {
                         <User size={18} /> Profile
                     </button>
 
-                    {isAdminOrSuper && (
+                    {canManageUsers && (
                         <button
                             className="sidebar-link"
                             onClick={() => { setShowCreateUser(!showCreateUser); setDrawerOpen(false); }}
@@ -227,7 +228,7 @@ export default function AppShell({ children }: AppShellProps) {
                         </div>
                         <div className="sidebar-user-info">
                             <div className="sidebar-user-name">{user.name}</div>
-                            <div className="sidebar-user-role">{user.role}</div>
+                            <div className="sidebar-user-role">{roleDisplayName(user.role)}</div>
                         </div>
                         <button
                             className="sidebar-link"
@@ -295,7 +296,7 @@ export default function AppShell({ children }: AppShellProps) {
                                     value={selectedWard ?? 'all'}
                                     onChange={(e) => setSelectedWard(e.target.value === 'all' ? null : Number(e.target.value))}
                                 >
-                                    <option value="all">{isJeOrAe ? `All My Wards (${wardList.length})` : 'All Wards'}</option>
+                                    <option value="all">{isWardScopedOfficer ? `All My Wards (${wardList.length})` : 'All Wards'}</option>
                                     {wardList.map(w => (
                                         <option key={w.id} value={w.number}>{w.name}</option>
                                     ))}
@@ -321,6 +322,7 @@ export default function AppShell({ children }: AppShellProps) {
                             </div>
                         </div>
 
+                        {!isPublicUser && (
                         <button
                             className={`dss-toggle-btn ${routerLocation.pathname === '/dss' ? 'active' : ''}`}
                             onClick={() => {
@@ -332,6 +334,7 @@ export default function AppShell({ children }: AppShellProps) {
                             <Shield size={18} />
                             <span>DSS</span>
                         </button>
+                        )}
 
                         {user && (
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: '4px' }}>
@@ -340,9 +343,8 @@ export default function AppShell({ children }: AppShellProps) {
                                     <span style={{
                                         display: 'inline-block', padding: '1px 8px', borderRadius: 10,
                                         fontSize: '9px', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase',
-                                        background: user.role === 'SuperAdmin' || user.role === 'Admin' ? 'rgba(239,68,68,0.15)' : user.role === 'AE' ? 'rgba(99,102,241,0.15)' : user.role === 'JE' ? 'rgba(16,185,129,0.15)' : 'rgba(100,116,139,0.15)',
-                                        color: user.role === 'SuperAdmin' || user.role === 'Admin' ? '#ef4444' : user.role === 'AE' ? '#818cf8' : user.role === 'JE' ? '#10b981' : '#94a3b8',
-                                    }}>{user.role}</span>
+                                        ...roleBadgeStyle(user.role),
+                                    }}>{roleDisplayName(user.role)}</span>
                                 </div>
                             </div>
                         )}
@@ -355,15 +357,17 @@ export default function AppShell({ children }: AppShellProps) {
                             {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
                         </button>
 
+                        {!isPublicUser && (
                         <button className="notification-btn" onClick={() => navigate('/notifications')}>
                             <Bell size={20} />
                             {unreadNotifications > 0 && <span className="dot" />}
                         </button>
+                        )}
                     </div>
                 </header>
 
                 {/* Create User Modal */}
-                {showCreateUser && isAdminOrSuper && (
+                {showCreateUser && canManageUsers && (
                     <div style={{
                         position: 'fixed', inset: 0, zIndex: 1000,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -403,11 +407,11 @@ export default function AppShell({ children }: AppShellProps) {
                                         value={cuRole} onChange={e => setCuRole(e.target.value as UserRole)}
                                         style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color, #334155)', background: 'var(--bg-primary, #0f1729)', color: 'var(--text-primary)' }}
                                     >
-                                        <option value="Officer">Officer</option>
-                                        <option value="JE">JE (Junior Engineer)</option>
-                                        <option value="AE">AE (Assistant Engineer)</option>
-                                        <option value="Admin">Admin</option>
-                                        <option value="SuperAdmin">SuperAdmin</option>
+                                        <option value="APPCB_Regional">APPCB — Regional</option>
+                                        <option value="APPCB_Field">APPCB — Field</option>
+                                        <option value="ULB_City">ULB — City</option>
+                                        <option value="ULB_Ward">ULB — Ward</option>
+                                        <option value="Public">Public</option>
                                     </select>
                                 </div>
                                 {cuErr && <p style={{ color: '#ef4444', fontSize: '12px' }}>{cuErr}</p>}

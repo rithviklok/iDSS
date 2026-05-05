@@ -11,7 +11,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import { fetchSensors, fetchHotspots, fetchAirsheds, fetchSourceContributions, fetchHeatmap, fetchPollutionGrid, fetchDssTriggers, fetchForecast, fetchDssStats, fetchSensorPlotReadings, fetchSensorSources, fetchSourcePinpointing } from '../services/api';
 import type { ForecastPoint, ForecastStation, ForecastResult, SensorPlotReading } from '../services/api';
-import { computeIDW, getAQICategory, pollutionGridToRaster, renderSmoothHeatmap, type HeatmapRaster } from '../utils/idw';
+import { computeIDW, getAQICategory, pm25ToAQI, pollutionGridToRaster, renderSmoothHeatmap, type HeatmapRaster } from '../utils/idw';
 import type { Sensor, MapLayerState, Hotspot, Airshed, SourceContribution, HeatmapPoint, HotspotMode } from '../types';
 
 function getSensorColor(pm25: number): string {
@@ -545,28 +545,52 @@ function SensorMarkers({
 
             const marker = L.marker([sensor.location.lat, sensor.location.lng], { icon });
             marker.on('click', () => {
-                const cat = getAQICategory(sensor.pm25);
+                const cat = getAQICategory(displayPm25);
+                const aqiNumeric = pm25ToAQI(displayPm25);
                 const healthLabel = sensor.isActive ? 'Active' : 'Inactive';
                 const healthColor = sensor.isActive ? '#22c55e' : '#94a3b8';
 
-                const hasGasData = sensor.co != null || sensor.no2 != null || sensor.so2 != null || sensor.o3 != null || sensor.nh3 != null;
-                const hasWeatherData = sensor.windSpeed != null || sensor.rh != null || sensor.temp != null;
-                const gasSectionHtml = (hasGasData || hasWeatherData) ? `
-            <div style="margin-top:8px;padding-top:8px;border-top:1px solid #334155;">
-              <div style="color:#94a3b8;font-size:10px;font-weight:600;letter-spacing:0.05em;margin-bottom:4px;">GAS &amp; WEATHER</div>
-              ${sensor.co  != null ? `<div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:#94a3b8">CO</span><span style="font-weight:600">${sensor.co.toFixed(2)} µg/m³</span></div>` : ''}
-              ${sensor.no2 != null ? `<div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:#94a3b8">NO₂</span><span style="font-weight:600">${Math.round(sensor.no2)} µg/m³</span></div>` : ''}
-              ${sensor.so2 != null ? `<div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:#94a3b8">SO₂</span><span style="font-weight:600">${Math.round(sensor.so2)} µg/m³</span></div>` : ''}
-              ${sensor.o3  != null ? `<div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:#94a3b8">O₃</span><span style="font-weight:600">${Math.round(sensor.o3)} µg/m³</span></div>` : ''}
-              ${sensor.nh3 != null ? `<div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:#94a3b8">NH₃</span><span style="font-weight:600">${Math.round(sensor.nh3)} µg/m³</span></div>` : ''}
-              ${sensor.windSpeed != null ? `<div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:#94a3b8">Wind Speed</span><span style="font-weight:600">${sensor.windSpeed} km/h</span></div>` : ''}
-              ${sensor.rh   != null ? `<div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:#94a3b8">Humidity</span><span style="font-weight:600">${sensor.rh}%</span></div>` : ''}
-              ${sensor.temp != null ? `<div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:#94a3b8">Temperature</span><span style="font-weight:600">${sensor.temp} °C</span></div>` : ''}
-            </div>` : '';
+                const fmtµg = (v: number | null | undefined, decimals?: number) =>
+                    v != null && Number.isFinite(Number(v))
+                        ? (decimals != null ? Number(v).toFixed(decimals) : String(Math.round(Number(v))))
+                        : '—';
+                const fmtPctRh = (v: number | null | undefined) =>
+                    v != null && Number.isFinite(Number(v)) ? `${Math.round(Number(v))}%` : '—';
+                const fmtTemp = (v: number | null | undefined) =>
+                    v != null && Number.isFinite(Number(v)) ? `${Number(v).toFixed(1)} °C` : '—';
+                const fmtWind = (v: number | null | undefined) =>
+                    v != null && Number.isFinite(Number(v)) ? `${Number(v)} km/h` : '—';
+
+                const airQualitySection = `
+            <div style="padding-bottom:10px;border-bottom:1px solid #334155;">
+              <div style="color:#94a3b8;font-size:10px;font-weight:600;letter-spacing:0.06em;margin-bottom:6px;">AIR QUALITY</div>
+              <div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:#94a3b8">PM2.5</span><span style="font-weight:600;color:${color}">${Math.round(displayPm25)} µg/m³</span></div>
+              <div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:#94a3b8">PM10</span><span style="font-weight:600">${fmtµg(sensor.pm10)} µg/m³</span></div>
+              <div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:#94a3b8">AQI</span><span style="font-weight:600;color:${cat.color}">${Math.round(aqiNumeric)} <span style="color:#cbd5e1;font-weight:500;font-size:12px;">(${cat.label})</span></span></div>
+              <div style="font-size:10px;color:#64748b;margin-top:4px;line-height:1.35;">AQI is estimated from PM₂.₅ (Indian scale).</div>
+            </div>`;
+
+                const traceGasesSection = `
+            <div style="margin-top:10px;padding-bottom:10px;border-bottom:1px solid #334155;">
+              <div style="color:#94a3b8;font-size:10px;font-weight:600;letter-spacing:0.06em;margin-bottom:6px;">TRACE GASES</div>
+              <div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:#94a3b8">Carbon monoxide (CO)</span><span style="font-weight:600">${sensor.co != null ? `${fmtµg(sensor.co, 2)} µg/m³` : '—'}</span></div>
+              <div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:#94a3b8">Nitrogen dioxide (NO₂)</span><span style="font-weight:600">${sensor.no2 != null ? `${fmtµg(sensor.no2)} µg/m³` : '—'}</span></div>
+              <div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:#94a3b8">Ozone (O₃)</span><span style="font-weight:600">${sensor.o3 != null ? `${fmtµg(sensor.o3)} µg/m³` : '—'}</span></div>
+              ${sensor.so2 != null ? `<div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:#94a3b8">Sulfur dioxide (SO₂)</span><span style="font-weight:600">${fmtµg(sensor.so2)} µg/m³</span></div>` : ''}
+              ${sensor.nh3 != null ? `<div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:#94a3b8">Ammonia (NH₃)</span><span style="font-weight:600">${fmtµg(sensor.nh3)} µg/m³</span></div>` : ''}
+            </div>`;
+
+                const weatherSection = `
+            <div style="margin-top:10px;padding-bottom:10px;border-bottom:1px solid #334155;">
+              <div style="color:#94a3b8;font-size:10px;font-weight:600;letter-spacing:0.06em;margin-bottom:6px;">WEATHER</div>
+              <div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:#94a3b8">Temperature</span><span style="font-weight:600">${fmtTemp(sensor.temp)}</span></div>
+              <div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:#94a3b8">Relative humidity (RH)</span><span style="font-weight:600">${fmtPctRh(sensor.rh)}</span></div>
+              <div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:#94a3b8">Wind speed</span><span style="font-weight:600">${fmtWind(sensor.windSpeed)}</span></div>
+            </div>`;
 
                 const popupContainer = document.createElement('div');
                 popupContainer.innerHTML = `
-          <div style="background:#1a1f35;color:#f1f5f9;border-radius:10px;min-width:260px;max-width:320px;font-family:Inter,sans-serif;font-size:13px;max-height:420px;display:flex;flex-direction:column;overflow:hidden;">
+          <div style="background:#1a1f35;color:#f1f5f9;border-radius:10px;min-width:280px;max-width:340px;font-family:Inter,sans-serif;font-size:13px;max-height:480px;display:flex;flex-direction:column;overflow:hidden;">
             <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 14px 8px;background:#1a1f35;position:sticky;top:0;z-index:1;flex-shrink:0;">
               <h4 style="font-size:14px;font-weight:600;margin:0;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${sensor.name}</h4>
               <button id="remove-sensor-btn" title="Remove from map" style="flex-shrink:0;margin-left:8px;background:#2d3655;border:none;border-radius:6px;color:#94a3b8;cursor:pointer;padding:4px 8px;font-size:11px;display:flex;align-items:center;gap:4px;transition:background 0.15s;">
@@ -575,11 +599,10 @@ function SensorMarkers({
               </button>
             </div>
             <div style="overflow-y:auto;padding:0 14px 14px;flex:1;min-height:0;">
-            <div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:#94a3b8">PM2.5</span><span style="font-weight:600;color:${color}">${Math.round(sensor.pm25)} µg/m³</span></div>
-            <div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:#94a3b8">PM10</span><span style="font-weight:600">${sensor.pm10} µg/m³</span></div>
-            ${gasSectionHtml}
-            <div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:#94a3b8">Status</span><span style="font-weight:600;color:${cat.color}">${cat.label}</span></div>
-            <div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:#94a3b8">Health</span><span style="font-weight:600;color:${healthColor}">${healthLabel}</span></div>
+            ${airQualitySection}
+            ${traceGasesSection}
+            ${weatherSection}
+            <div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:#94a3b8">Sensor status</span><span style="font-weight:600;color:${healthColor}">${healthLabel}</span></div>
             <div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:#94a3b8">Zone / Ward</span><span style="font-weight:600">Z${sensor.zone} / W${sensor.ward}</span></div>
             <div style="display:flex;justify-content:space-between;padding:3px 0;margin-bottom:10px"><span style="color:#94a3b8">ID</span><span style="font-family:monospace;font-size:11px">${sensor.id}</span></div>
             <div id="sensor-sources-section" style="margin-top:10px;padding-top:10px;border-top:1px solid #334155;">
@@ -713,7 +736,7 @@ function SensorMarkers({
                         </div>`;
                 });
 
-                fetchSensorSources(sensor.id, districtId, sensor.pm25).then(result => {
+                fetchSensorSources(sensor.id, districtId, displayPm25).then(result => {
                     // Show affected wards in popup (highlighting is handled by source pinpointing above)
                     if (result.affectedWards?.length) {
                         const wardsDiv = popupContainer.querySelector('#affected-wards-section');
@@ -1692,9 +1715,9 @@ export default function MapView() {
     const queryClient = useQueryClient();
     const { theme } = useTheme();
     const { selectedDistrict, selectedWard, livePm25, liveSensorCount, updateSensorStats } = useLocation();
-    const { hasRole } = useAuth();
-    // JE/AE: don't pass ward to stats/triggers — backend role filter handles ward scoping
-    const statsWard = (hasRole('JE') || hasRole('AE')) ? undefined : selectedWard;
+    const { isWardScopedOfficer } = useAuth();
+    // Ward officers: don't pass ward to stats/triggers — backend role filter handles ward scoping
+    const statsWard = isWardScopedOfficer ? undefined : selectedWard;
     const [selectedSensor, setSelectedSensor] = useState<Sensor | null>(null);
     const [highlightedWards, setHighlightedWards] = useState<{ wardName: string; percentage: number }[]>([]);
     // Ward data from sensor click (source pinpointing popup)

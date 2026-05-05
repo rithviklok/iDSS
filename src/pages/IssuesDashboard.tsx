@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Search, AlertTriangle, Zap, CheckCircle, ArrowUpRight, ChevronRight, Calendar, Filter } from 'lucide-react';
+import { Search, AlertTriangle, Zap, CheckCircle, ArrowUpRight, ChevronRight, Calendar, Filter, LayoutList, ChartColumn } from 'lucide-react';
+import ComparativeAnalyticsPanel from '../components/issues/ComparativeAnalyticsPanel';
 import { useLocation } from '../contexts/LocationContext';
 import { fetchIssues, fetchWardsByDistrict } from '../services/api';
 import { getIssueIcon } from '../data/mockIssueData';
@@ -65,6 +66,7 @@ function timeAgo(dateStr: string): string {
 
 type FilterTab = 'all' | IssueStatus;
 type QuickFilter = 'last7' | 'last30' | 'this_month' | 'last_month' | 'this_year' | 'all_time';
+type IssuesMainTab = 'issues' | 'analytics';
 
 export default function IssuesDashboard() {
     const { selectedDistrict, allStates, allDistricts, isLoadingGeography } = useLocation();
@@ -78,6 +80,7 @@ export default function IssuesDashboard() {
     const [filterDistrictId, setFilterDistrictId] = useState(selectedDistrict.id);
     const [filterWard, setFilterWard] = useState('all');
     const [filterStatus, setFilterStatus] = useState('all');
+    const [issuesMainTab, setIssuesMainTab] = useState<IssuesMainTab>('issues');
 
     // Districts for selected state; wards for selected district (from LocationContext, same as homepage)
     const districtsForState = useMemo(() => {
@@ -205,6 +208,26 @@ export default function IssuesDashboard() {
                     ))}
                 </div>
 
+                {/* Primary view: issue list vs comparative analytics */}
+                <div className="issues-main-tab-row">
+                    <button
+                        type="button"
+                        className={`issues-main-tab ${issuesMainTab === 'issues' ? 'active' : ''}`}
+                        onClick={() => setIssuesMainTab('issues')}
+                    >
+                        <LayoutList size={15} />
+                        Issue list
+                    </button>
+                    <button
+                        type="button"
+                        className={`issues-main-tab ${issuesMainTab === 'analytics' ? 'active' : ''}`}
+                        onClick={() => setIssuesMainTab('analytics')}
+                    >
+                        <ChartColumn size={15} />
+                        Comparative Analytics
+                    </button>
+                </div>
+
                 {/* Row 2: Geography + Status Dropdowns */}
                 <div className="filter-bar-section">
                     <div className="filter-dropdown-group">
@@ -295,7 +318,12 @@ export default function IssuesDashboard() {
                 </div>
             </div>
 
+            {issuesMainTab === 'analytics' && (
+                <ComparativeAnalyticsPanel issues={filteredIssues} />
+            )}
+
             {/* Status Summary Cards */}
+            {issuesMainTab === 'issues' && (
             <div className="status-summary">
                 <div className="status-card new-card" onClick={() => { setActiveFilter('new'); setFilterStatus('new'); }} style={{ cursor: 'pointer' }}>
                     <div className="icon"><AlertTriangle size={18} /></div>
@@ -326,8 +354,10 @@ export default function IssuesDashboard() {
                     </div>
                 </div>
             </div>
+            )}
 
             {/* Search */}
+            {issuesMainTab === 'issues' && (
             <div className="issues-search">
                 <Search size={18} color="var(--text-muted)" />
                 <input
@@ -337,8 +367,10 @@ export default function IssuesDashboard() {
                     onChange={(e) => setSearchQuery(e.target.value)}
                 />
             </div>
+            )}
 
             {/* Filter Tabs */}
+            {issuesMainTab === 'issues' && (
             <div className="filter-tabs">
                 {filterTabs.map(tab => (
                     <button
@@ -353,9 +385,10 @@ export default function IssuesDashboard() {
                     </button>
                 ))}
             </div>
+            )}
 
             {/* Issue Cards */}
-            {loading ? (
+            {issuesMainTab === 'issues' && (loading ? (
                 <div className="empty-state">
                     <div className="icon">⏳</div>
                     <h3>Loading issues...</h3>
@@ -413,7 +446,7 @@ export default function IssuesDashboard() {
                         </div>
                     </div>
                 ))
-            )}
+            ))}
         </div>
     );
 }

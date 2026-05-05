@@ -2,41 +2,71 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
 import type { UserProfile, UserRole } from '../types';
 import { isDummyDataMode } from '../services/dummyMode';
+import {
+    normalizeRole,
+    permissionsForRole,
+    roleDisplayName,
+    canManageUsers as rbacCanManageUsers,
+    canViewRegulatoryDssTabs,
+    canManageSensorRegistry,
+    isPublicRole,
+    isWardScopedOfficer,
+} from '../auth/rbac';
 
 const DSS_API_BASE = import.meta.env.VITE_DSS_API_BASE || 'http://localhost:3000';
 
-const DUMMY_USER: UserProfile = {
-    id: 'local-dummy-user',
-    username: 'demo',
-    email: 'demo@local.test',
-    name: 'Demo Officer',
-    role: 'SuperAdmin',
-    districtId: 'uttar-pradesh-lucknow',
-    permissions: ['view_all', 'manage_issues', 'manage_triggers', 'configure_sensors'],
-};
+function buildDummyUser(username: string, role: UserRole): UserProfile {
+    const wardScoped = role === 'ULB_Ward';
+    const baseName = username.trim() || roleDisplayName(role);
+    return {
+        id: `dummy-${username}-${role}`,
+        username: username.trim() || 'user',
+        email: `${username.trim() || 'user'}@demo.local`,
+        name: baseName,
+        role,
+        districtId: 'uttar-pradesh-lucknow',
+        permissions: permissionsForRole(role),
+        wardIds: wardScoped ? [18, 45] : undefined,
+        supervisorId: null,
+    };
+}
+
+function normalizeProfile(raw: UserProfile): UserProfile {
+    const role = normalizeRole(raw.role as string);
+    return {
+        ...raw,
+        role,
+        permissions: raw.permissions?.length ? raw.permissions : permissionsForRole(role),
+    };
+}
 
 interface AuthContextType {
     user: UserProfile | null;
     isAuthenticated: boolean;
     isLoading: boolean;
-    login: (username: string, password: string) => Promise<void>;
+    login: (username: string, password: string, demoRole?: UserRole) => Promise<void>;
     signup: (username: string, password: string) => Promise<string>;
     createUser: (username: string, password: string, role: UserRole) => Promise<string>;
     logout: () => Promise<void>;
     hasRole: (...roles: UserRole[]) => boolean;
     canPerformAction: (action: string) => boolean;
+    /** @deprecated use canViewRegulatoryDss — kept for gradual migration */
     isAdminOrSuper: boolean;
+    canManageUsers: boolean;
+    canViewRegulatoryDss: boolean;
+    canManageSensorRegistry: boolean;
+    isPublicUser: boolean;
+    isWardScopedOfficer: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<UserProfile | null>(() =>
-        isDummyDataMode() ? DUMMY_USER : null,
+        isDummyDataMode() ? buildDummyUser('demo', 'APPCB_Regional') : null,
     );
     const [isLoading, setIsLoading] = useState(() => !isDummyDataMode());
 
-    // Restore session on mount (with timeout to avoid stuck loading)
     useEffect(() => {
         if (isDummyDataMode()) return;
         const controller = new AbortController();
@@ -44,7 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         fetch(`${DSS_API_BASE}/auth/profile`, { credentials: 'include', signal: controller.signal })
             .then(r => r.ok ? r.json() : Promise.reject())
-            .then((profile: UserProfile) => setUser(profile))
+            .then((profile: UserProfile) => setUser(normalizeProfile(profile)))
             .catch(() => setUser(null))
             .finally(() => {
                 clearTimeout(timeoutId);
@@ -52,10 +82,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             });
     }, []);
 
-    const login = useCallback(async (username: string, password: string) => {
+    const login = useCallback(async (username: string, password: string, demoRole?: UserRole) => {
         if (isDummyDataMode()) {
             void password;
-            setUser({ ...DUMMY_USER, username: username || DUMMY_USER.username, name: username || DUMMY_USER.name });
+            const role = demoRole ?? 'APPCB_Regional';
+            setUser(buildDummyUser(username.trim() || 'user', role));
             return;
         }
         const res = await fetch(`${DSS_API_BASE}/auth/login`, {
@@ -66,14 +97,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.message || 'Login failed');
-        setUser(data.user as UserProfile);
+        setUser(normalizeProfile(data.user as UserProfile));
     }, []);
 
     const signup = useCallback(async (username: string, password: string): Promise<string> => {
         if (isDummyDataMode()) {
             void username;
             void password;
-            return 'Dummy mode: use the pre-filled demo session (no backend).';
+            return 'Dummy mode: use the demo persona selector (no backend).';
         }
         const res = await fetch(`${DSS_API_BASE}/auth/signup`, {
             method: 'POST',
@@ -120,7 +151,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return user.permissions?.includes(action) ?? false;
     }, [user]);
 
-    const isAdminOrSuper = !!user && (user.role === 'SuperAdmin' || user.role === 'Admin');
+    const role = user?.role;
+    const canManageUsersFlag = !!role && rbacCanManageUsers(role);
+    const canViewRegulatoryDssFlag = !!role && canViewRegulatoryDssTabs(role);
+    const canManageSensorRegistryFlag = !!role && canManageSensorRegistry(role);
+    const isPublicUserFlag = !!role && isPublicRole(role);
+    const isWardScopedFlag = !!role && isWardScopedOfficer(role);
 
     return (
         <AuthContext.Provider value={{
@@ -133,7 +169,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             logout,
             hasRole,
             canPerformAction,
-            isAdminOrSuper,
+            isAdminOrSuper: canViewRegulatoryDssFlag,
+            canManageUsers: canManageUsersFlag,
+            canViewRegulatoryDss: canViewRegulatoryDssFlag,
+            canManageSensorRegistry: canManageSensorRegistryFlag,
+            isPublicUser: isPublicUserFlag,
+            isWardScopedOfficer: isWardScopedFlag,
         }}>
             {children}
         </AuthContext.Provider>

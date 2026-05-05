@@ -1094,6 +1094,224 @@ a:hover {
   flex-wrap: wrap;
 }
 
+/* Issues dashboard: list vs comparative analytics (below quick filters) */
+.issues-main-tab-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: var(--spacing-sm) 0 0;
+  margin-top: var(--spacing-md);
+  border-top: 1px dashed var(--border-color);
+}
+
+.issues-main-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  border: 1px solid var(--border-color);
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  transition: all var(--transition-fast);
+}
+
+.issues-main-tab:hover {
+  border-color: var(--text-muted);
+  color: var(--text-primary);
+}
+
+.issues-main-tab.active {
+  border-color: var(--accent-primary);
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--accent-primary);
+}
+
+/* Comparative analytics panel */
+.comparative-analytics {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-lg);
+  margin-bottom: var(--spacing-lg);
+}
+
+.analytics-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--spacing-lg);
+  margin-bottom: var(--spacing-md);
+}
+
+.analytics-toolbar-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.analytics-toolbar-grow {
+  flex: 1;
+  min-width: 220px;
+}
+
+.analytics-toolbar-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.analytics-segment {
+  display: inline-flex;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--bg-input);
+}
+
+.analytics-segment button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.analytics-segment button:hover {
+  color: var(--text-primary);
+}
+
+.analytics-segment button.active {
+  background: rgba(59, 130, 246, 0.18);
+  color: var(--accent-primary);
+}
+
+.analytics-select {
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: inherit;
+  max-width: 100%;
+}
+
+.analytics-footnote {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.45;
+  margin: 0 0 var(--spacing-md);
+}
+
+.analytics-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 18px;
+  margin-bottom: var(--spacing-md);
+  font-size: 11px;
+}
+
+.analytics-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+}
+
+.analytics-legend-unit {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.analytics-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.analytics-chart-wrap {
+  overflow-x: auto;
+  padding-bottom: var(--spacing-sm);
+}
+
+.analytics-bar-svg {
+  display: block;
+  min-width: 100%;
+  height: auto;
+  max-height: 340px;
+}
+
+.analytics-x-label {
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
+.analytics-pie-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-xl);
+  justify-content: center;
+}
+
+.analytics-pie-svg {
+  flex-shrink: 0;
+  width: 280px;
+  max-width: 100%;
+  height: auto;
+}
+
+.analytics-pie-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.analytics-pie-legend li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.analytics-pie-legend strong {
+  margin-left: auto;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.analytics-empty {
+  text-align: center;
+  padding: var(--spacing-xl);
+  color: var(--text-muted);
+}
+
+.analytics-empty h3 {
+  margin: var(--spacing-md) 0 var(--spacing-sm);
+  color: var(--text-secondary);
+  font-size: 16px;
+}
+
 .filter-bar-section+.filter-bar-section {
   margin-top: var(--spacing-md);
   padding-top: var(--spacing-md);

@@ -2,6 +2,7 @@ import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { isPublicRole, canManageSensorRegistry } from './auth/rbac';
 import { LocationProvider } from './contexts/LocationContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 
@@ -32,6 +33,20 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/** Blocks Public persona from operational modules (map + profile only). */
+function OfficialRoute({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  if (!user || isPublicRole(user.role)) return <Navigate to="/" replace />;
+  return <>{children}</>;
+}
+
+/** Sensor CRUD — APPCB + ULB city (not ward-only or public). */
+function SensorRegistryRoute({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  if (!user || !canManageSensorRegistry(user.role)) return <Navigate to="/configurator" replace />;
+  return <>{children}</>;
+}
+
 function AppRoutes() {
   const { isAuthenticated, isLoading } = useAuth();
 
@@ -59,15 +74,15 @@ function AppRoutes() {
     <AppShell>
       <Routes>
         <Route path="/" element={<ProtectedRoute><MapView /></ProtectedRoute>} />
-        <Route path="/dss" element={<ProtectedRoute><DSSPage /></ProtectedRoute>} />
-        <Route path="/dss/triggers/:id" element={<ProtectedRoute><TriggerDetailPage /></ProtectedRoute>} />
-        <Route path="/issues" element={<ProtectedRoute><IssuesDashboard /></ProtectedRoute>} />
-        <Route path="/issues/:id" element={<ProtectedRoute><IssueDetail /></ProtectedRoute>} />
-        <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
+        <Route path="/dss" element={<ProtectedRoute><OfficialRoute><DSSPage /></OfficialRoute></ProtectedRoute>} />
+        <Route path="/dss/triggers/:id" element={<ProtectedRoute><OfficialRoute><TriggerDetailPage /></OfficialRoute></ProtectedRoute>} />
+        <Route path="/issues" element={<ProtectedRoute><OfficialRoute><IssuesDashboard /></OfficialRoute></ProtectedRoute>} />
+        <Route path="/issues/:id" element={<ProtectedRoute><OfficialRoute><IssueDetail /></OfficialRoute></ProtectedRoute>} />
+        <Route path="/notifications" element={<ProtectedRoute><OfficialRoute><NotificationsPage /></OfficialRoute></ProtectedRoute>} />
         <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
-        <Route path="/configurator" element={<ProtectedRoute><ConfiguratorLayout><SensorHealthMonitor /></ConfiguratorLayout></ProtectedRoute>} />
-        <Route path="/configurator/sensors" element={<ProtectedRoute><ConfiguratorLayout><ManageSensors /></ConfiguratorLayout></ProtectedRoute>} />
-        <Route path="/configurator/*" element={<ProtectedRoute><ConfiguratorLayout><div style={{ padding: 40, color: 'var(--text-muted)', textAlign: 'center' }}>Coming soon</div></ConfiguratorLayout></ProtectedRoute>} />
+        <Route path="/configurator" element={<ProtectedRoute><OfficialRoute><ConfiguratorLayout><SensorHealthMonitor /></ConfiguratorLayout></OfficialRoute></ProtectedRoute>} />
+        <Route path="/configurator/sensors" element={<ProtectedRoute><OfficialRoute><SensorRegistryRoute><ConfiguratorLayout><ManageSensors /></ConfiguratorLayout></SensorRegistryRoute></OfficialRoute></ProtectedRoute>} />
+        <Route path="/configurator/*" element={<ProtectedRoute><OfficialRoute><ConfiguratorLayout><div style={{ padding: 40, color: 'var(--text-muted)', textAlign: 'center' }}>Coming soon</div></ConfiguratorLayout></OfficialRoute></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AppShell>
