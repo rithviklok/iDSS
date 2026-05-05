@@ -1,0 +1,32 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "redirects": [
+    { "source": "/", "destination": "/dss/", "permanent": false }
+  ],
+  "rewrites": [
+    {
+      "source": "/dss/assets/:path*",
+      "destination": "/assets/:path*"
+    },
+    {
+      "source": "/dss/:path.json",
+      "destination": "/:path.json"
+    },
+    {
+      "source": "/dss/vite.svg",
+      "destination": "/vite.svg"
+    },
+    {
+      "source": "/dss",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/dss/",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/dss/:path*",
+      "destination": "/index.html"
+    }
+  ]
+}
